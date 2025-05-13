@@ -1,0 +1,76 @@
+# -*- coding: utf-8 -*-
+import os
+import sys
+import time
+import subprocess
+
+# Ensure pyfiglet is installed and import Figlet
+try:
+    from pyfiglet import Figlet
+except ImportError:
+    print("Modulen 'pyfiglet' ikke funnet. Installerer automatisk...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "pyfiglet"]);
+    from pyfiglet import Figlet
+
+# Cross-platform single-character input
+def getch():
+    try:
+        # Windows
+        import msvcrt
+        return msvcrt.getwch()
+    except ImportError:
+        # Unix/Linux/macOS
+        import tty
+        import termios
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        return ch
+
+# Clear the terminal screen
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+
+def main():
+    clear_screen()
+    print("Trykk mellomrom for å starte")
+    # Vent på at brukeren trykker mellomrom
+    while True:
+        ch = getch()
+        if ch == ' ':
+            break
+
+    # Setup Figlet with dynamic width equal to terminal width
+    try:
+        cols, _ = os.get_terminal_size()
+    except OSError:
+        cols = 80
+    figlet = Figlet(width=cols)
+
+    # Norsk alfabet med æ, ø, å
+    alfabet = [*"abcdefghijklmnopqrstuvwxyz", "æ", "ø", "å"]
+
+    start_time = time.time()
+
+    for letter in alfabet:
+        clear_screen()
+        # Vis stor bokstav i ASCII-art
+        print(figlet.renderText(letter))
+        # Vent til brukeren taster korrekt bokstav
+        while True:
+            ch = getch()
+            if ch.lower() == letter:
+                break
+
+    elapsed = time.time() - start_time
+    clear_screen()
+    print(f"Gratulerer! Du brukte {elapsed:.2f} sekunder på hele alfabetet.")
+
+
+if __name__ == '__main__':
+    main()
