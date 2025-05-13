@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alfabetet</title>
+  <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      background-color: #f0f0f0;
+      font-family: Arial, sans-serif;
+      color: #333;
+      padding-top: 2vmin;
+      position: relative;
+    }
+    #instruction {
+      font-size: 3vmin;
+      text-align: center;
+      margin-bottom: 1vmin;
+      padding: 0 1vmin;
+    }
+    #display {
+      font-size: 50vmin;
+      font-weight: bold;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      flex-grow: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: auto;
+    }
+    #message, #leaderboard {
+      font-size: 4vmin;
+      margin-top: 1vmin;
+      text-align: center;
+    }
+    #name-input, #start-button, #restart-button {
+      font-size: 4vmin;
+      margin: 0.5vmin;
+    }
+    #leaderboard ul {
+      list-style: none;
+      padding: 0;
+      margin: 0.5vmin 0;
+    }
+    #leaderboard li {
+      margin: 0.2vmin 0;
+    }
+    #watermark {
+      position: fixed;
+      bottom: 1vmin;
+      right: 1vmin;
+      font-size: 2vmin;
+      color: rgba(0, 0, 0, 0.3);
+      pointer-events: none;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="instruction">Du skal skrive alfabetet så fort du kan. Havner du blant topp 5 denne uken?</div>
+  <div id="display"></div>
+  <div id="message">Skriv inn navn:</div>
+  <input id="name-input" type="text" placeholder="Navn" autofocus />
+  <button id="start-button">Start</button>
+  <button id="restart-button" style="display:none;">Spill igjen</button>
+  <div id="leaderboard"></div>
+  <div id="watermark">LektorAntonsen2025</div>
+
+  <script>
+    (function() {
+      const alfabet = [..."abcdefghijklmnopqrstuvwxyzæøå"];
+      let index = 0;
+      let startTime = null;
+      let userName = '';
+
+      const displayEl = document.getElementById('display');
+      const messageEl = document.getElementById('message');
+      const nameInput = document.getElementById('name-input');
+      const startButton = document.getElementById('start-button');
+      const restartButton = document.getElementById('restart-button');
+      const leaderboardEl = document.getElementById('leaderboard');
+
+      const defaultList = [
+        {name: 'Ola', time: 210},
+        {name: 'Kari', time: 220},
+        {name: 'Per', time: 230},
+        {name: 'Marit', time: 240},
+        {name: 'Espen', time: 250}
+      ];
+
+      function getLastSunday20() {
+        const now = new Date();
+        const day = now.getDay();
+        let lastSunday = new Date(now);
+        lastSunday.setDate(now.getDate() - day);
+        lastSunday.setHours(20,0,0,0);
+        if (lastSunday > now) lastSunday.setDate(lastSunday.getDate() - 7);
+        return lastSunday;
+      }
+
+      function resetIfNeeded() {
+        const threshold = getLastSunday20().getTime();
+        const lastReset = parseInt(localStorage.getItem('alfabetetLastReset') || '0', 10);
+        if (lastReset < threshold) {
+          localStorage.setItem('alfabetetBoard', JSON.stringify(defaultList));
+          localStorage.setItem('alfabetetLastReset', threshold);
+        }
+      }
+
+      function loadBoard() {
+        resetIfNeeded();
+        const data = JSON.parse(localStorage.getItem('alfabetetBoard') || 'null');
+        return Array.isArray(data) ? data : defaultList.slice();
+      }
+
+      function saveBoard(board) {
+        localStorage.setItem('alfabetetBoard', JSON.stringify(board));
+      }
+
+      function updateBoard(name, time) {
+        const board = loadBoard();
+        board.push({name, time});
+        board.sort((a,b) => a.time - b.time);
+        const top5 = board.slice(0,5);
+        saveBoard(top5);
+        return top5;
+      }
+
+      function renderBoard(board) {
+        leaderboardEl.innerHTML = '<div>Topp 5 denne uken</div><ul>' +
+          board.map(item => `<li>${item.name}: ${item.time.toFixed(1)}s</li>`).join('') +
+          '</ul>';
+      }
+
+      renderBoard(loadBoard());
+
+      function showLetter(letter) {
+        messageEl.textContent = '';
+        displayEl.textContent = letter;
+      }
+
+      function endGame(elapsed) {
+        displayEl.textContent = '';
+        messageEl.textContent = `Gratulerer ${userName}! Du brukte ${elapsed.toFixed(1)} sekunder.`;
+        const top5 = updateBoard(userName, elapsed);
+        renderBoard(top5);
+        restartButton.style.display = '';
+      }
+
+      function startGame() {
+        userName = nameInput.value.trim() || 'Ukjent';
+        nameInput.style.display = 'none';
+        startButton.style.display = 'none';
+        restartButton.style.display = 'none';
+        index = 0;
+        startTime = Date.now();
+        showLetter(alfabet[index]);
+      }
+
+      startButton.addEventListener('click', startGame);
+      restartButton.addEventListener('click', () => {
+        index = 0;
+        startTime = Date.now();
+        restartButton.style.display = 'none';
+        showLetter(alfabet[index]);
+      });
+
+      document.body.addEventListener('keydown', function(e) {
+        if (startTime === null) return;
+        const key = e.key.toLowerCase();
+        if (key === alfabet[index]) {
+          index++;
+          if (index < alfabet.length) {
+            showLetter(alfabet[index]);
+          } else {
+            const elapsed = (Date.now() - startTime) / 1000;
+            startTime = null;
+            endGame(elapsed);
+          }
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
