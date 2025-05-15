@@ -5,143 +5,172 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Alfabetet</title>
   <style>
-    html, body { width: 100%; height: 100%; margin: 0; padding: 0; }
+    html, body { width:100%; height:100%; margin:0; padding:0; }
     body {
-      display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
-      background-color: #f0f0f0; font-family: Arial, sans-serif; color: #333; padding-top: 2vmin;
-      position: relative;
+      display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+      background-color:#f0f0f0; font-family:Arial,sans-serif; color:#333; padding-top:2vmin; position:relative;
     }
-    #instruction { font-size: 3vmin; text-align: center; margin-bottom: 1vmin; padding: 0 1vmin; }
+    #instruction { font-size:3vmin; text-align:center; margin-bottom:1vmin; padding:0 1vmin; }
+    #mode-button { position:fixed; top:1vmin; right:1vmin; font-size:4vmin; }
     #display {
-      font-size: 50vmin; font-weight: bold; text-align: center; margin: 0; padding: 0;
-      user-select: none; flex-grow: 1; display: flex; align-items: center; justify-content: center;
-      width: 100%; height: auto;
+      font-size: 50vmin;
+      font-weight:bold; text-align:center; margin:0; padding:0; user-select:none;
+      flex-grow:1; display:flex; align-items:center; justify-content:center; width:100%; height:auto;
     }
-    #message, #leaderboard { font-size: 4vmin; margin-top: 1vmin; text-align: center; }
-    #name-input, #start-button, #restart-button { font-size: 4vmin; margin: 0.5vmin; }
-    #leaderboard ul { list-style: none; padding: 0; margin: 0.5vmin 0; }
-    #leaderboard li { margin: 0.2vmin 0; }
-    #watermark {
-      position: fixed; bottom: 1vmin; right: 1vmin; font-size: 2vmin;
-      color: rgba(0,0,0,0.3); pointer-events: none; user-select: none;
-    }
+    #message { font-size:4vmin; margin-top:1vmin; text-align:center; }
+    #name-input, #start-button, #restart-button, #newplayer-button { font-size:4vmin; margin:0.5vmin; }
+    #leaderboard-alphabet, #leaderboard-vowels { font-size:4vmin; margin-top:1vmin; text-align:center; }
+    #leaderboard-alphabet ul, #leaderboard-vowels ul { list-style:none; padding:0; margin:0.5vmin 0; }
+    #leaderboard-alphabet li, #leaderboard-vowels li { margin:0.2vmin 0; }
+    #watermark { position:fixed; bottom:1vmin; right:1vmin; font-size:2vmin; color:rgba(0,0,0,0.3); pointer-events:none; user-select:none; }
+    #game-input { position:absolute; opacity:0; left:-9999px; height:0; }
+      /* New container for side-by-side leaderboards */
+    #leaderboards-container { display: flex; width: 100%; justify-content: space-around; margin-top: 1vmin; }
+    #leaderboard-alphabet, #leaderboard-vowels { width: 45%; text-align: center; }
   </style>
 </head>
 <body>
   <div id="instruction">Du skal skrive alfabetet så fort du kan. Havner du blant topp 5 denne uken?</div>
+  <button id="mode-button">Vokaler</button>
   <div id="display"></div>
   <div id="message">Skriv inn navn:</div>
-  <input id="name-input" type="text" placeholder="Navn" autofocus />
+  <input id="name-input" type="text" placeholder="Navn" />
   <button id="start-button">Start</button>
   <button id="restart-button" style="display:none;">Spill igjen</button>
-  <div id="leaderboard"></div>
+  <button id="newplayer-button" style="display:none;">Ny spiller</button>
+  <div id="leaderboards-container">
+    <div id="leaderboard-alphabet"></div>
+    <div id="leaderboard-vowels"></div>
+  </div>
   <div id="watermark">LektorAntonsen2025</div>
+  <input id="game-input" type="text" autocomplete="off" autocapitalize="none" />
 
   <script>
-    <!-- KONFIGURASJON: Sett inn GIST_ID og GITHUB_TOKEN rett under -->
-    <!-- Eksempel: const GIST_ID = '8ddf0d6a9d69c4eb7ef384149bc36ff8'; -->
-    <!--           const GITHUB_TOKEN = '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'; -->
-    (async function() {
-      // Konfigurasjon for GitHub Gist
-      const GIST_ID = 'DIN_GIST_ID_HER';
-      const GITHUB_TOKEN = 'DIN_PERSONLIGE_TOKEN_HER';
+    // Utility: two modes and sequences
+    const sequences = {
+      alphabet: [..."abcdefghijklmnopqrstuvwxyzæøå"],
+      vowels: [..."aeiouyæøå"]
+    };
+    let currentMode = 'alphabet';
+    let currentSeq = sequences[currentMode];
 
-      // Hent og oppdater highscore via GitHub Gist
-      async function loadBoard() {
-        const res = await fetch(`https://api.github.com/gists/${GIST_ID}`);
-        const gist = await res.json();
-        const content = gist.files['scores.json'].content;
-        return JSON.parse(content);
-      }
-      async function saveBoard(board) {
-        await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `token ${GITHUB_TOKEN}`
-          },
-          body: JSON.stringify({ files: { 'scores.json': { content: JSON.stringify(board, null, 2) } } })
-        });
-      }
-      function getLastSunday20() {
-        const now = new Date();
-        const day = now.getDay();
-        let last = new Date(now);
-        last.setDate(now.getDate() - day);
-        last.setHours(20,0,0,0);
-        if (last > now) last.setDate(last.getDate() - 7);
-        return last;
-      }
+    // Game state
+    let index = 0;
+    let startTime = null;
+    let userName = '';
 
-      // Weekly reset handler (maintained in gist data)
-      async function resetIfNeeded(board) {
-        const threshold = getLastSunday20().getTime();
-        if (!board.lastReset || board.lastReset < threshold) {
-          board.entries = board.defaultEntries;
-          board.lastReset = threshold;
-          await saveBoard(board);
+    // Elements
+    const displayEl = document.getElementById('display');
+    const messageEl = document.getElementById('message');
+    const nameInput = document.getElementById('name-input');
+    const startButton = document.getElementById('start-button');
+    const restartButton = document.getElementById('restart-button');
+    const newPlayerButton = document.getElementById('newplayer-button');
+    const modeButton = document.getElementById('mode-button');
+    const lbAlpha = document.getElementById('leaderboard-alphabet');
+    const lbVowel = document.getElementById('leaderboard-vowels');
+    const gameInput = document.getElementById('game-input');
+
+    const defaultList = [
+      {name:'Ola',time:210},{name:'Kari',time:220},{name:'Per',time:230},{name:'Marit',time:240},{name:'Espen',time:250}
+    ];
+
+    // Storage key by mode
+    function keyFor(mode) { return mode === 'alphabet' ? 'alfabetetBoard' : 'vokalerBoard'; }
+
+    function getLSBoard(mode) {
+      let board = JSON.parse(localStorage.getItem(keyFor(mode)) || 'null');
+      if (!board || !Array.isArray(board)) {
+        board = defaultList.slice();
+        localStorage.setItem(keyFor(mode), JSON.stringify(board));
+      }
+      return board;
+    }
+    function saveLSBoard(mode, board) {
+      localStorage.setItem(keyFor(mode), JSON.stringify(board));
+    }
+
+    // Render one board
+    function renderBoard(mode, container) {
+      const entries = getLSBoard(mode);
+      container.innerHTML = `<div>Topp 5 ${mode === 'alphabet' ? 'Alfabetet' : 'Vokaler'} denne uken</div><ul>` +
+        entries.map(e=>`<li>${e.name}: ${e.time.toFixed(1)}s</li>`).join('') + '</ul>';
+    }
+
+    // Initialize both
+    function initLeaderboards() {
+      renderBoard('alphabet', lbAlpha);
+      renderBoard('vowels', lbVowel);
+    }
+
+    // Show letter and focus input
+    function showLetter(letter) {
+      messageEl.textContent = '';
+      displayEl.textContent = letter;
+      gameInput.value = '';
+      gameInput.focus();
+    }
+
+    // End game logic
+    async function endGame(elapsed) {
+      displayEl.textContent = '';
+      messageEl.textContent = `Gratulerer ${userName}! Du brukte ${elapsed.toFixed(1)} sekunder.`;
+      // Save locally
+      let board = getLSBoard(currentMode);
+      board.push({name:userName,time:elapsed});
+      board.sort((a,b)=>a.time-b.time);
+      board = board.slice(0,5);
+      saveLSBoard(currentMode, board);
+      // Re-render both
+      initLeaderboards();
+      restartButton.style.display = '';
+      newPlayerButton.style.display = '';
+      gameInput.blur();
+    }
+
+    // Start game
+    function startGame() {
+      userName = nameInput.value.trim() || 'Ukjent';
+      nameInput.style.display = 'none'; startButton.style.display = 'none';
+      restartButton.style.display = 'none'; newPlayerButton.style.display = 'none';
+      index = 0; startTime = Date.now(); showLetter(currentSeq[index]);
+    }
+
+    // Event bindings
+    document.addEventListener('DOMContentLoaded', ()=> nameInput.focus());
+    startButton.addEventListener('click', startGame);
+    restartButton.addEventListener('click', ()=>{
+      index=0; startTime=Date.now();
+      restartButton.style.display='none'; newPlayerButton.style.display='none';
+      showLetter(currentSeq[index]);
+    });
+    newPlayerButton.addEventListener('click', ()=>{
+      nameInput.value=''; nameInput.style.display=''; startButton.style.display='';
+      messageEl.textContent='Skriv inn navn:'; displayEl.textContent='';
+      restartButton.style.display='none'; newPlayerButton.style.display='none'; nameInput.focus();
+    });
+    modeButton.addEventListener('click', ()=>{
+      currentMode = currentMode==='alphabet'?'vowels':'alphabet';
+      currentSeq = sequences[currentMode];
+      modeButton.textContent = currentMode==='alphabet'?'Vokaler':'Alfabetet';
+      // Reset board view (still show both)
+      if(startTime!==null){ index=0; showLetter(currentSeq[index]); }
+    });
+    gameInput.addEventListener('input', async e => {
+      if (startTime===null) return;
+      const key = e.data; if(!key) return;
+      const ch = key.toLowerCase();
+      if (ch===currentSeq[index]) {
+        index++;
+        if(index<currentSeq.length) showLetter(currentSeq[index]);
+        else {
+          const elapsed=(Date.now()-startTime)/1000; startTime=null; await endGame(elapsed);
         }
       }
+    });
 
-      // Initial loading
-      const displayEl = document.getElementById('display');
-      const messageEl = document.getElementById('message');
-      const nameInput = document.getElementById('name-input');
-      const startButton = document.getElementById('start-button');
-      const restartButton = document.getElementById('restart-button');
-      const leaderboardEl = document.getElementById('leaderboard');
-
-      let alfabet = [..."abcdefghijklmnopqrstuvwxyzæøå"];
-      let index = 0, startTime = null, userName = '';
-
-      // Fetch initial board object
-      let boardData = await loadBoard();
-      // If gist doesn't include defaultEntries or lastReset, initialize
-      boardData.defaultEntries = boardData.defaultEntries || [
-        {name:'Ola', time:210},{name:'Kari', time:220},{name:'Per', time:230},{name:'Marit', time:240},{name:'Espen', time:250}
-      ];
-      await resetIfNeeded(boardData);
-
-      function renderBoard(entries) {
-        leaderboardEl.innerHTML = '<div>Topp 5 denne uken</div><ul>' +
-          entries.map(e => `<li>${e.name}: ${e.time.toFixed(1)}s</li>`).join('') + '</ul>';
-      }
-      renderBoard(boardData.entries);
-
-      function showLetter(letter) {
-        messageEl.textContent = '';
-        displayEl.textContent = letter;
-      }
-      async function endGame(elapsed) {
-        displayEl.textContent = '';
-        messageEl.textContent = `Gratulerer ${userName}! Du brukte ${elapsed.toFixed(1)} sekunder.`;
-        // Oppdater boardData
-        boardData.entries.push({name:userName, time:elapsed});
-        boardData.entries.sort((a,b)=>a.time-b.time);
-        boardData.entries = boardData.entries.slice(0,5);
-        await saveBoard(boardData);
-        renderBoard(boardData.entries);
-        restartButton.style.display = '';
-      }
-
-      function startGame() {
-        userName = nameInput.value.trim()||'Ukjent';
-        nameInput.style.display='none'; startButton.style.display='none'; restartButton.style.display='none';
-        index=0; startTime=Date.now(); showLetter(alfabet[index]);
-      }
-      startButton.addEventListener('click', startGame);
-      restartButton.addEventListener('click', ()=>{ index=0; startTime=Date.now(); restartButton.style.display='none'; showLetter(alfabet[index]); });
-
-      document.body.addEventListener('keydown', async e=>{
-        if(startTime===null) return;
-        const key=e.key.toLowerCase();
-        if(key===alfabet[index]){
-          index++;
-          if(index<alfabet.length){ showLetter(alfabet[index]); }
-          else { const elapsed=(Date.now()-startTime)/1000; startTime=null; await endGame(elapsed); }
-        }
-      });
-    })();
+    // Initialize
+    initLeaderboards();
   </script>
 </body>
 </html>
